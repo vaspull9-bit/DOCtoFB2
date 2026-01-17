@@ -638,19 +638,44 @@ class MainWindow(QMainWindow):
 
     def clear_all_widgets(self):
         """Очищает все текстовые поля и сбрасывает состояние."""
-        # Очищаем основное текстовое поле с исходным текстом
-        self.source_text.clear()
-        # Очищаем поле с результатом конвертации (FB2)
-        self.result_text.clear()
-        # Очищаем статусную строку (если нужно)
-        self.status_bar.clearMessage()
-        # Также можно очистить путь к текущему файлу
-        self.current_file = None
-        # Обновите другие элементы интерфейса, если необходимо
-        # Например, надпись о загруженном файле:
-        self.file_label.setText("Файл не выбран")
-        # Логируем действие
-        self.log_text.append("> Все поля очищены.")        
+        try:
+            # Очищаем основное текстовое поле с исходным текстом
+            if hasattr(self, 'source_text'):
+                self.source_text.clear()
+            else:
+                print("[DEBUG] Атрибут source_text не найден")
+            
+            # Очищаем поле с результатом конвертации (FB2)
+            if hasattr(self, 'result_text'):
+                self.result_text.clear()
+            else:
+                print("[DEBUG] Атрибут result_text не найден")
+            
+            # Очищаем статусную строку
+            if hasattr(self, 'status_bar') and self.status_bar:
+                self.status_bar.clearMessage()
+            
+            # Сбрасываем путь к текущему файлу
+            self.current_file = None
+            
+            # Обновляем надпись о загруженном файле (если есть)
+            if hasattr(self, 'file_label'):
+                self.file_label.setText("Файл не выбран")
+            else:
+                print("[DEBUG] Атрибут file_label не найден")
+            
+            # Добавляем запись в лог (если есть)
+            if hasattr(self, 'log_text'):
+                self.log_text.append("> Все поля очищены.")
+            else:
+                print("[DEBUG] Атрибут log_text не найден")
+                
+        except Exception as e:
+            # Выводим ошибку в консоль для отладки
+            print(f"[ОШИБКА в clear_all_widgets]: {str(e)}")
+            # Можно показать сообщение пользователю
+            import traceback
+            traceback.print_exc()  # Полная трассировка ошибки       
     
     def show_about(self):
         """Показать информацию о программе"""

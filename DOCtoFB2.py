@@ -451,6 +451,12 @@ class MainWindow(QMainWindow):
         settings_action = QAction("⚙ Настройки", self)
         settings_action.triggered.connect(self.open_settings)
         toolbar.addAction(settings_action)
+
+        # Добавляем разделитель и кнопку "Очистить всё"
+        toolbar.addSeparator()
+        self.clear_button = QPushButton(" Очистить всё ")  # Создаем кнопку
+        self.clear_button.clicked.connect(self.clear_all_widgets)  # Подключаем обработчик
+        toolbar.addWidget(self.clear_button)  # Добавляем кнопку на панель
         
         # О программе
         about_action = QAction("ℹ О программе", self)
@@ -629,13 +635,29 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self)
         if dialog.exec_():
             self.settings = AppSettings.load()
+
+    def clear_all_widgets(self):
+        """Очищает все текстовые поля и сбрасывает состояние."""
+        # Очищаем основное текстовое поле с исходным текстом
+        self.source_text.clear()
+        # Очищаем поле с результатом конвертации (FB2)
+        self.result_text.clear()
+        # Очищаем статусную строку (если нужно)
+        self.status_bar.clearMessage()
+        # Также можно очистить путь к текущему файлу
+        self.current_file = None
+        # Обновите другие элементы интерфейса, если необходимо
+        # Например, надпись о загруженном файле:
+        self.file_label.setText("Файл не выбран")
+        # Логируем действие
+        self.log_text.append("> Все поля очищены.")        
     
     def show_about(self):
         """Показать информацию о программе"""
         about_text = """
         <h2>DOCtoFB2 - Конвертер для Литрес Самиздат</h2>
         <p><b>Автор:</b> VUS HAAR (C)</p>
-        <p><b>Версия:</b> 1.1.0</p>
+        <p><b>Версия:</b> 1.1.1</p>
         <p><b>Описание:</b> Программа для конвертации файлов DOC/DOCX в формат FB2 
         с соблюдением правил платформы Литрес Самиздат.</p>
         

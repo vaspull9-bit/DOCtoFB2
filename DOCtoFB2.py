@@ -289,35 +289,36 @@ class DocxToFb2Converter:
                 self._add_text_with_formatting(para, p, settings)
     
     def _add_text_with_formatting(self, paragraph, parent, settings):
-        """Добавить текст с форматированием"""
+        """Корректно добавляет текст параграфа с форматированием."""
         if not paragraph.runs:
-            parent.text = paragraph.text
+            if paragraph.text:
+                parent.text = paragraph.text
             return
-        
+
+        # Собираем текст и теги последовательно
         current_element = parent
         for run in paragraph.runs:
             if not run.text:
                 continue
-            
-            # Жирный текст
+
+            # Определяем, нужен ли тег форматирования
             if run.bold and settings.preserve_formatting:
                 strong = etree.SubElement(current_element, "strong")
                 strong.text = run.text
-                current_element = strong
-            # Курсив
+                # После тега <strong> возвращаемся к родительскому элементу
+                if current_element != parent:
+                    current_element = parent
             elif run.italic and settings.preserve_formatting:
                 emphasis = etree.SubElement(current_element, "emphasis")
                 emphasis.text = run.text
-                current_element = emphasis
-            # Обычный текст
+                if current_element != parent:
+                    current_element = parent
             else:
-                if current_element == parent:
-                    if parent.text:
-                        parent.text += run.text
-                    else:
-                        parent.text = run.text
+                # Обычный текст добавляем в текущий элемент
+                if current_element.text is None:
+                    current_element.text = run.text
                 else:
-                    current_element.tail = run.text if not current_element.tail else current_element.tail + run.text
+                    current_element.text += run.text
     
     def _extract_images(self, docx_path, fb2_root):
         """Извлечь изображения из DOCX"""
@@ -394,7 +395,8 @@ class MainWindow(QMainWindow):
         # Левая панель - исходный текст (заглушка)
         self.source_text = QTextEdit()
         self.source_text.setPlaceholderText("Исходный DOC/DOCX файл будет отображен здесь после загрузки")
-        self.source_text.setReadOnly(True)
+        self.source_text.setReadOnly(False)
+        self.source_text.setPlaceholderText("Исходный DOC/DOCX текст. Можно редактировать перед конвертацией.")
         splitter.addWidget(self.source_text)
         
         # Правая панель - результат FB2
@@ -451,6 +453,11 @@ class MainWindow(QMainWindow):
         settings_action = QAction("⚙ Настройки", self)
         settings_action.triggered.connect(self.open_settings)
         toolbar.addAction(settings_action)
+
+        # Кнопка статистики
+        self.stats_button = QPushButton("📊 Статистика", self)
+        self.stats_button.clicked.connect(self.show_statistics)
+        toolbar.addWidget(self.stats_button)
 
         # Добавляем разделитель и кнопку "Очистить всё"
         toolbar.addSeparator()
@@ -636,6 +643,75 @@ class MainWindow(QMainWindow):
         if dialog.exec_():
             self.settings = AppSettings.load()
 
+
+    def show_statistics(self):
+        """Показывает статистику для исходного и конвертированного текста."""
+        stats_text = "=== СТАТИСТИКА ТЕКСТА ===\n\n"
+        
+        # Статистика для исходного DOCX
+        if self.source_text.toPlainText().strip():
+            source_stats = self.calculate_statistics(self.source_text.toPlainText())
+            stats_text += "ВХОДНОЙ ТЕКСТ (DOCX):\n"
+            stats_text += f"Слов: {source_stats['words']}\n"
+            stats_text += f"Знаков (без пробелов): {source_stats['chars_no_spaces']}\n"
+            stats_text += f"Знаков (с пробелами): {source_stats['chars_with_spaces']}\n"
+            stats_text += f"Абзацев: {source_stats['paragraphs']}\n"
+            stats_text += f"Строк: {source_stats['lines']}\n\n"
+        
+        # Статистика для конвертированного FB2
+        if self.result_text.toPlainText().strip():
+            # Убираем теги FB2 для чистого текста
+            fb2_text = self.strip_fb2_tags(self.result_text.toPlainText())
+            result_stats = self.calculate_statistics(fb2_text)
+            stats_text += "ВЫХОДНОЙ ТЕКСТ (FB2):\n"
+            stats_text += f"Слов: {result_stats['words']}\n"
+            stats_text += f"Знаков (без пробелов): {result_stats['chars_no_spaces']}\n"
+            stats_text += f"Знаков (с пробелами): {result_stats['chars_with_spaces']}\n"
+            stats_text += f"Абзацев: {result_stats['paragraphs']}\n"
+            stats_text += f"Строк: {result_stats['lines']}\n"
+        
+        # Показываем статистику в диалоговом окне
+        stats_dialog = QDialog(self)
+        stats_dialog.setWindowTitle("Статистика текста")
+        stats_dialog.setFixedSize(400, 300)
+        
+        layout = QVBoxLayout()
+        text_edit = QTextEdit()
+        text_edit.setPlainText(stats_text)
+        text_edit.setReadOnly(True)
+        layout.addWidget(text_edit)
+        
+        # Кнопка копирования
+        copy_btn = QPushButton("Копировать в буфер")
+        copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(stats_text))
+        layout.addWidget(copy_btn)
+        
+        stats_dialog.setLayout(layout)
+        stats_dialog.exec_()
+
+    def calculate_statistics(self, text):
+        """Вычисляет статистику текста."""
+        lines = text.count('\n') + 1
+        paragraphs = len([p for p in text.split('\n') if p.strip()])
+        words = len(text.split())
+        chars_with_spaces = len(text)
+        chars_no_spaces = len(text.replace(" ", "").replace("\n", "").replace("\t", ""))
+        
+        return {
+            'lines': lines, 'paragraphs': paragraphs, 'words': words,
+            'chars_with_spaces': chars_with_spaces, 'chars_no_spaces': chars_no_spaces
+        }
+
+    def strip_fb2_tags(self, fb2_text):
+        """Удаляет теги FB2 для подсчета статистики."""
+        import re
+        # Удаляем XML теги
+        clean_text = re.sub(r'<[^>]+>', '', fb2_text)
+        # Заменяем XML сущности
+        clean_text = clean_text.replace('&lt;', '<').replace('&gt;', '>')
+        return clean_text    
+
+
     def clear_all_widgets(self):
         """Очищает все текстовые поля и сбрасывает состояние."""
         try:
@@ -682,7 +758,7 @@ class MainWindow(QMainWindow):
         about_text = """
         <h2>DOCtoFB2 - Конвертер для Литрес Самиздат</h2>
         <p><b>Автор:</b> VUS HAAR (C)</p>
-        <p><b>Версия:</b> 1.1.1</p>
+        <p><b>Версия:</b> 1.1.2</p>
         <p><b>Описание:</b> Программа для конвертации файлов DOC/DOCX в формат FB2 
         с соблюдением правил платформы Литрес Самиздат.</p>
         

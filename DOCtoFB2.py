@@ -264,29 +264,41 @@ class DocxToFb2Converter:
         lang.text = "ru"
     
     def _process_document(self, doc, section, settings):
-        """Обработать документ"""
+        """Обработать документ с улучшенной логикой."""
         for para in doc.paragraphs:
-            if not para.text and settings.remove_empty_lines:
+            if not para.text.strip() and settings.remove_empty_lines:
                 continue
             
-            # Определение стиля
-            style = para.style.name.lower() if para.style else ''
+            # Определение стиля (более точное)
+            style_name = para.style.name.lower() if para.style else ''
             
             # Обработка заголовков
-            if 'heading' in style:
-                level = 1
-                if 'heading 2' in style:
-                    level = 2
-                elif 'heading 3' in style:
-                    level = 3
-                
-                subtitle = etree.SubElement(section, f"subtitle{'' if level == 1 else str(level)}")
-                self._add_text_with_formatting(para, subtitle, settings)
+            if any(h in style_name for h in ['heading', 'заголовок']):
+                if '1' in style_name or 'heading 1' in style_name:
+                    # Создаем новый раздел для каждого заголовка 1-го уровня
+                    section = etree.SubElement(section, "section")
+                    title = etree.SubElement(section, "title")
+                    title.text = para.text
+                elif '2' in style_name or 'heading 2' in style_name:
+                    subtitle = etree.SubElement(section, "subtitle2")
+                    subtitle.text = para.text
+                elif '3' in style_name or 'heading 3' in style_name:
+                    subtitle = etree.SubElement(section, "subtitle3")
+                    subtitle.text = para.text
             
             # Обычный текст
             else:
+                # ВАЖНО: создаем полностью новый элемент <p> для КАЖДОГО параграфа
                 p = etree.SubElement(section, "p")
-                self._add_text_with_formatting(para, p, settings)
+                
+                # Упрощенная обработка форматирования
+                # Если весь параграф жирный - создаем <strong>
+                if all(run.bold for run in para.runs if run.text.strip()) and settings.preserve_formatting:
+                    strong = etree.SubElement(p, "strong")
+                    strong.text = para.text
+                else:
+                    # Иначе добавляем текст без тегов
+                    p.text = para.text
     
     def _add_text_with_formatting(self, paragraph, parent, settings):
         """Корректно добавляет текст параграфа с форматированием, сохраняя порядок."""
@@ -774,7 +786,7 @@ class MainWindow(QMainWindow):
         about_text = """
         <h2>DOCtoFB2 - Конвертер для Литрес Самиздат</h2>
         <p><b>Автор:</b> VUS HAAR (C)</p>
-        <p><b>Версия:</b> 1.1.3</p>
+        <p><b>Версия:</b> 1.1.4</p>
         <p><b>Описание:</b> Программа для конвертации файлов DOC/DOCX в формат FB2 
         с соблюдением правил платформы Литрес Самиздат.</p>
         

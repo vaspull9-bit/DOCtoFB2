@@ -289,36 +289,52 @@ class DocxToFb2Converter:
                 self._add_text_with_formatting(para, p, settings)
     
     def _add_text_with_formatting(self, paragraph, parent, settings):
-        """Корректно добавляет текст параграфа с форматированием."""
+        """Корректно добавляет текст параграфа с форматированием, сохраняя порядок."""
         if not paragraph.runs:
             if paragraph.text:
                 parent.text = paragraph.text
             return
 
-        # Собираем текст и теги последовательно
-        current_element = parent
+        # Основной алгоритм: проходим по runs и строим структуру последовательно
+        current_element = parent  # Начинаем с родительского элемента <p>
+        
         for run in paragraph.runs:
             if not run.text:
                 continue
 
-            # Определяем, нужен ли тег форматирования
+            # Определяем, нужен ли тег форматирования для этого run
             if run.bold and settings.preserve_formatting:
-                strong = etree.SubElement(current_element, "strong")
-                strong.text = run.text
-                # После тега <strong> возвращаемся к родительскому элементу
-                if current_element != parent:
-                    current_element = parent
-            elif run.italic and settings.preserve_formatting:
-                emphasis = etree.SubElement(current_element, "emphasis")
-                emphasis.text = run.text
-                if current_element != parent:
-                    current_element = parent
-            else:
-                # Обычный текст добавляем в текущий элемент
-                if current_element.text is None:
-                    current_element.text = run.text
+                # Если предыдущий элемент уже <strong>, добавляем текст в него
+                if current_element.tag == 'strong':
+                    current_element.text = (current_element.text or '') + run.text
                 else:
-                    current_element.text += run.text
+                    # Создаем новый тег <strong>
+                    strong_elem = etree.SubElement(current_element, "strong")
+                    strong_elem.text = run.text
+                    current_element = strong_elem
+                    
+            elif run.italic and settings.preserve_formatting:
+                # Аналогично для <emphasis>
+                if current_element.tag == 'emphasis':
+                    current_element.text = (current_element.text or '') + run.text
+                else:
+                    emphasis_elem = etree.SubElement(current_element, "emphasis")
+                    emphasis_elem.text = run.text
+                    current_element = emphasis_elem
+            else:
+                # Обычный текст
+                if current_element == parent:
+                    # Добавляем прямо в родительский <p>
+                    if parent.text is None:
+                        parent.text = run.text
+                    else:
+                        parent.text += run.text
+                else:
+                    # Добавляем как хвостовой текст к текущему тегу (например, после </strong>)
+                    if current_element.tail is None:
+                        current_element.tail = run.text
+                    else:
+                        current_element.tail += run.text
     
     def _extract_images(self, docx_path, fb2_root):
         """Извлечь изображения из DOCX"""
@@ -758,7 +774,7 @@ class MainWindow(QMainWindow):
         about_text = """
         <h2>DOCtoFB2 - Конвертер для Литрес Самиздат</h2>
         <p><b>Автор:</b> VUS HAAR (C)</p>
-        <p><b>Версия:</b> 1.1.2</p>
+        <p><b>Версия:</b> 1.1.3</p>
         <p><b>Описание:</b> Программа для конвертации файлов DOC/DOCX в формат FB2 
         с соблюдением правил платформы Литрес Самиздат.</p>
         
